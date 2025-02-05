@@ -20,7 +20,7 @@ from langchain_community.document_loaders.parsers.language.language_parser impor
 from langchain_community.document_loaders.parsers.language.language_parser import LANGUAGE_SEGMENTERS
 from langchain_core.document_loaders.blob_loaders import Blob
 
-from ..data_models.input import SourceDocumentsInfo
+from data_models.input import SourceDocumentsInfo
 from .source_code_git_loader import SourceCodeGitLoader
 
 if typing.TYPE_CHECKING:

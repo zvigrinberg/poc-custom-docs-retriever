@@ -1,5 +1,8 @@
 from langchain_core.documents import Document
+
+from data_models.input import SourceDocumentsInfo
 from retrievers.toy_retriever import ToyRetriever
+from utils.documents_loader import DocumentEmbedding
 
 documents = [
     Document(
@@ -24,5 +27,20 @@ documents = [
     ),
 ]
 
+
+def process_list(documents_list):
+    for document in documents_list:
+        print(document)
+
+
 retriever = ToyRetriever(documents=documents, k=3)
 print(retriever.invoke("that"))
+
+document_embedder = DocumentEmbedding(embedding=None,
+                                      vdb_directory="/tmp/vdb",
+                                      git_directory="/tmp")
+documents_list = document_embedder.collect_documents(
+    source_info=SourceDocumentsInfo(type='code', git_repo="https://github.com/zvigrinberg/router",
+                                    ref="b49f382f59d6479af9ea26f067ee5cb4e1dd13d9", include=["**/*.go"]))
+
+process_list(documents_list)

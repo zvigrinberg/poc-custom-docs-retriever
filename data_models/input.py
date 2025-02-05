@@ -9,7 +9,7 @@ from pydantic import Field
 from pydantic import Tag
 from pydantic import field_validator
 
-from common import HashableModel
+from .common import HashableModel
 
 
 class SourceDocumentsInfo(HashableModel):
