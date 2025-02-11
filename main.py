@@ -29,9 +29,17 @@ documents = [
 
 
 def process_list(documents_list):
+    simplified_codes = 0
+    functions_parsers = 0
+    others = 0
     for document in documents_list:
-        print(document)
-
+        if document.metadata.get('content_type') == 'functions_classes':
+            functions_parsers += 1
+        elif document.metadata.get('content_type') == 'simplified_code':
+            simplified_codes += 1
+        else:
+            others += 1
+    print(f"simplified_codes: {simplified_codes}, functions_parsers: {functions_parsers}, others: {others}")
 
 retriever = ToyRetriever(documents=documents, k=3)
 print(retriever.invoke("that"))

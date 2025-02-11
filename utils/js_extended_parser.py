@@ -4,7 +4,7 @@ from typing import List, Any, Tuple
 import esprima
 from langchain_community.document_loaders.parsers.language.javascript import JavaScriptSegmenter
 
-logger = logging.getLogger(f"morpheus.{__name__}")
+logger = logging.getLogger(f"poc.{__name__}")
 
 
 class ExtendedJavaScriptSegmenter(JavaScriptSegmenter):

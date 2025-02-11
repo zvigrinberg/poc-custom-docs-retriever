@@ -28,7 +28,7 @@ if typing.TYPE_CHECKING:
 
 PathLike = typing.Union[str, os.PathLike]
 
-logger = logging.getLogger(f"morpheus.{__name__}")
+logger = logging.getLogger(f"poc.{__name__}")
 
 
 class MultiLanguageRecursiveCharacterTextSplitter(RecursiveCharacterTextSplitter):
@@ -439,7 +439,7 @@ class DocumentEmbedding:
                 # Determine the output path by combining the vdb_directory with the hash of the source documents
                 vdb_output_dir = self.vdb_directory / source_type / str(self.hash_source_documents_info(source_infos))
 
-                if (not vdb_output_dir.exists() or os.environ.get("MORPHEUS_ALWAYS_REBUILD_VDB", "0") == "1"):
+                if (not vdb_output_dir.exists() or os.environ.get("poc_ALWAYS_REBUILD_VDB", "0") == "1"):
                     vdb = self.create_vdb(source_infos=source_infos, output_path=vdb_output_dir)
                 else:
                     logger.debug("Cache hit on VDB. Loading existing FAISS database: %s", vdb_output_dir)
