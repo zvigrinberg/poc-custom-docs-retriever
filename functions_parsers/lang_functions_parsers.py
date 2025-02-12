@@ -10,7 +10,8 @@ class LanguageFunctionsParser(ABC):
         pass
 
     @abstractmethod
-    def search_for_called_function(self, caller_function: Document, callee_function: str) -> bool:
+    def search_for_called_function(self, caller_function: Document, callee_function: str, callee_function_package: str,
+                                   code_documents: list[Document]) -> bool:
         pass
 
     @abstractmethod

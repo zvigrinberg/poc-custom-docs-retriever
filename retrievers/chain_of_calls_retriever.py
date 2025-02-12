@@ -1,7 +1,6 @@
 from pathlib import Path
 from typing import List, Any
 
-from langchain_community.document_loaders.parsers import LanguageParser
 from langchain_core.callbacks import CallbackManagerForRetrieverRun
 from langchain_core.documents import Document
 from langchain_core.retrievers import BaseRetriever
@@ -21,9 +20,9 @@ def get_functions_for_package(package_name: str, documents: list[Document], lang
     # Retrieve documents of package only ( functions + code)
     if sources_location_packages:
         for document in documents:
-            doc_extension = get_extension_of_file(document.metadata.get['source'])
-            if (document.metadata.get['source'].startsWith(language_parser.dir_name_for_3rd_party_packages()) and
-                    document.metadata.get['content_type'] == 'functions_classes' and
+            doc_extension = get_extension_of_file(document.metadata.get('source'))
+            if (document.metadata.get('source').startsWith(language_parser.dir_name_for_3rd_party_packages()) and
+                    document.metadata.get('content_type') == 'functions_classes' and
                     language_parser.is_function(document) and
                     language_parser.is_exported_function(document) and
                     language_parser.is_supported_file_extensions(doc_extension) and
@@ -32,7 +31,7 @@ def get_functions_for_package(package_name: str, documents: list[Document], lang
     # Retrieve documents of application only ( functions + code)
     else:
         for document in documents:
-            doc_extension = get_extension_of_file(document.metadata.get['source'])
+            doc_extension = get_extension_of_file(document.metadata.get('source'))
             if (language_parser.is_root_package(document)
                     and language_parser.is_function(document)
                     and language_parser.is_supported_file_extensions(doc_extension)):
@@ -68,6 +67,7 @@ class ChainOfCallsRetriever(BaseRetriever):
 
     documents: List[Document]
     """List of documents comprising the path of call, if exists."""
+    documents_of_full_sources: List[Document]
     language_parser: LanguageFunctionsParser
     dependency_tree: DependencyTree
     tree_dict: dict
@@ -80,16 +80,18 @@ class ChainOfCallsRetriever(BaseRetriever):
     def __init__(self, documents: List[Document], ecosystem: Ecosystem, manifest_path: Path, package_name: str,
                  *args: Any, **kwargs: Any):
         super().__init__(*args, **kwargs)
-        self.language_parser = get_language_function_parser(ecosystem)
         self.dependency_tree = get_dependency_tree_builder(ecosystem)
+        self.language_parser = get_language_function_parser(ecosystem)
         self.tree_dict = self.dependency_tree.builder.build_tree(manifest_path=manifest_path)
         self.package_name = package_name
         self.documents = documents
         self.found_path = False
+        self.documents_of_full_sources = [doc for doc in self.documents
+                                          if doc.metadata.get('content_type') == 'simplified_code']
 
-    def __find_caller_function(self, document_function: Document) -> Document:
-        function_name = self.language_parser.get_function_name(doc)
-        package_names = self.language_parser.get_package_names(doc)
+    def __find_caller_function(self, document_function: Document, function_package: str) -> Document:
+        function_name = self.language_parser.get_function_name(document_function)
+        package_names = self.language_parser.get_package_names(document_function)
         direct_parents = list()
         # gets list of all direct parents of function
         for package_name in package_names:
@@ -111,7 +113,12 @@ class ChainOfCallsRetriever(BaseRetriever):
                                                                                        callee_function=
                                                                                        self.language_parser.
                                                                                        get_function_name(
-                                                                                           document_function))
+                                                                                           document_function),
+                                                                                       callee_function_package=
+                                                                                       function_package,
+                                                                                       code_documents=
+                                                                                       self.documents_of_full_sources
+                                                                                       )
             if function_is_being_called:
                 return doc
 
@@ -130,10 +137,11 @@ class ChainOfCallsRetriever(BaseRetriever):
                                                     language_parser=self.language_parser)
         matching_documents.append(target_function_doc)
         end_loop = False
+        current_package_name = self.package_name
         while True:
             if end_loop:
-                break;
-            found_document = self.__find_caller_function(doc=target_function_doc)
+                break
+            found_document = self.__find_caller_function(doc=target_function_doc, function_package=current_package_name)
             if found_document is not None:
                 matching_documents.append(found_document)
                 if self.language_parser.is_root_package(found_document):
@@ -141,6 +149,9 @@ class ChainOfCallsRetriever(BaseRetriever):
                     self.found_path = True
                 else:
                     target_function_doc = found_document
+                    package_names = [package_name for package_name in self.language_parser.get_package_names()
+                                     if self.tree_dict.get(package_name, None) is not None]
+                    current_package_name = package_names[0]
             else:
                 end_loop = True
 
