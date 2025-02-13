@@ -1,3 +1,4 @@
+import re
 from pathlib import Path
 from typing import List, Any
 
@@ -16,7 +17,7 @@ def get_extension_of_file(file_path: str):
 
 
 def get_functions_for_package(package_name: str, documents: list[Document], language_parser: LanguageFunctionsParser,
-                              sources_location_packages=True):
+                              function_to_search: str, sources_location_packages=True, ):
     # Retrieve documents of package only ( functions + code)
     if sources_location_packages:
         for document in documents:
@@ -26,7 +27,8 @@ def get_functions_for_package(package_name: str, documents: list[Document], lang
                     language_parser.is_function(document) and
                     language_parser.is_exported_function(document) and
                     language_parser.is_supported_file_extensions(doc_extension) and
-                    document_belongs_to_package(language_parser, document, package_name)):
+                    document_belongs_to_package(language_parser, document, package_name) and
+                    function_called_from_caller_body(document, function_to_search, language_parser)):
                 yield document
     # Retrieve documents of application only ( functions + code)
     else:
@@ -38,10 +40,21 @@ def get_functions_for_package(package_name: str, documents: list[Document], lang
                 yield document
 
 
+def function_called_from_caller_body(document, function_to_search, language_parser: LanguageFunctionsParser) -> bool:
+    function_word = language_parser.get_function_reserved_word()
+    func_header_template = rf"${function_word} (\(.*\))?\s?${function_to_search}"
+    return (re.search(pattern=function_to_search, string=document.metadata.get("page_content"),
+                      flags=re.IGNORECASE | re.MULTILINE)
+            # verify caller function or method is not the function
+            and not re.search(pattern=func_header_template,
+                              string=document.metadata.get("page_content"),
+                              flags=re.IGNORECASE | re.MULTILINE))
+
+
 def document_belongs_to_package(language_parser: LanguageFunctionsParser, document: Document,
                                 package_name: str) -> bool:
     return (not language_parser.is_root_package() and
-            language_parser.get_package_names(document) == package_name.lower())
+            language_parser.get_package_name(function=document, package_name=package_name))
 
 
 def find_initial_function(function_name: str, package_name: str, documents: list[Document],
@@ -77,20 +90,18 @@ class ChainOfCallsRetriever(BaseRetriever):
     k: int = 10
     """Number of top results to return"""
 
-    def __init__(self, documents: List[Document], ecosystem: Ecosystem, manifest_path: Path, package_name: str,
+    def __init__(self, documents: List[Document], ecosystem: Ecosystem, manifest_path: Path,
                  *args: Any, **kwargs: Any):
         super().__init__(*args, **kwargs)
         self.dependency_tree = get_dependency_tree_builder(ecosystem)
         self.language_parser = get_language_function_parser(ecosystem)
         self.tree_dict = self.dependency_tree.builder.build_tree(manifest_path=manifest_path)
-        self.package_name = package_name
         self.documents = documents
         self.found_path = False
         self.documents_of_full_sources = [doc for doc in self.documents
                                           if doc.metadata.get('content_type') == 'simplified_code']
 
     def __find_caller_function(self, document_function: Document, function_package: str) -> Document:
-        function_name = self.language_parser.get_function_name(document_function)
         package_names = self.language_parser.get_package_names(document_function)
         direct_parents = list()
         # gets list of all direct parents of function
@@ -104,16 +115,16 @@ class ChainOfCallsRetriever(BaseRetriever):
             sources_location_packages = True
             if package == ROOT_LEVEL_SENTINEL:
                 sources_location_packages = False
+            function_name_to_search = self.language_parser.get_function_name(document_function)
             for doc in get_functions_for_package(package_name=package, documents=self.documents,
                                                  language_parser=self.language_parser,
-                                                 sources_location_packages=sources_location_packages):
+                                                 sources_location_packages=sources_location_packages,
+                                                 function_to_search=function_name_to_search):
                 relevant_docs_to_search_in.append(doc)
         for doc in relevant_docs_to_search_in:
             function_is_being_called = self.language_parser.search_for_called_function(caller_function=doc,
                                                                                        callee_function=
-                                                                                       self.language_parser.
-                                                                                       get_function_name(
-                                                                                           document_function),
+                                                                                       function_name_to_search,
                                                                                        callee_function_package=
                                                                                        function_package,
                                                                                        code_documents=
@@ -126,18 +137,18 @@ class ChainOfCallsRetriever(BaseRetriever):
 
     def _get_relevant_documents(self, query: str, *, run_manager: CallbackManagerForRetrieverRun) -> List[Document]:
         """Sync implementations for retriever."""
-        current_function = query
+        (package_name, function) = query
         matching_documents = []
         for package in self.tree_dict:
-            if self.package_name in package.lower():
-                self.package_name = package
+            if package_name in package.lower():
+                package_name = package
                 break
 
-        target_function_doc = find_initial_function(query, package_name=self.package_name, documents=self.documents,
+        target_function_doc = find_initial_function(query, package_name=package_name, documents=self.documents,
                                                     language_parser=self.language_parser)
         matching_documents.append(target_function_doc)
         end_loop = False
-        current_package_name = self.package_name
+        current_package_name = package_name
         while True:
             if end_loop:
                 break

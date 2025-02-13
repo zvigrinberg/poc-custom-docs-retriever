@@ -7,6 +7,9 @@ from functions_parsers.lang_functions_parsers import LanguageFunctionsParser
 
 class GoLanguageFunctionsParser(LanguageFunctionsParser):
 
+    def get_function_reserved_word(self) -> str:
+        return "func"
+
     def is_searchable_file_name(self, function: Document) -> bool:
         file_path = str(function.metadata['source'])
         return "test" not in file_path[file_path.rfind("/") + 1:].split(".")[0].lower()
@@ -130,6 +133,7 @@ class GoLanguageFunctionsParser(LanguageFunctionsParser):
         for package in package_names:
             if package_name.lower() in package.lower() and package_name.lower() == package.lower():
                 return package.lower()
+        return None
 
     def is_root_package(self, function: Document) -> bool:
         return not function.metadata['source'].startswith(self.dir_name_for_3rd_party_packages)

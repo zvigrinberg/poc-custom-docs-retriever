@@ -60,4 +60,8 @@ class LanguageFunctionsParser(ABC):
     def is_searchable_file_name(self, function: Document) -> bool:
         pass
 
+    @abstractmethod
+    def get_function_reserved_word(self) -> str:
+        pass
+
 
