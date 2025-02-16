@@ -1,6 +1,6 @@
 import re
 from pathlib import Path
-from typing import List, Any
+from typing import List, Any, Optional
 
 from langchain_core.callbacks import CallbackManagerForRetrieverRun
 from langchain_core.documents import Document
@@ -12,17 +12,17 @@ from utils.dep_tree import DependencyTree, Ecosystem, get_dependency_tree_builde
 
 
 def get_extension_of_file(file_path: str):
-    extension_start = file_path.index(".")
+    extension_start = file_path.rfind(".")
     return file_path[extension_start:]
 
 
 def get_functions_for_package(package_name: str, documents: list[Document], language_parser: LanguageFunctionsParser,
-                              function_to_search: str, sources_location_packages=True, ):
-    # Retrieve documents of package only ( functions + code)
+                              function_to_search="", sources_location_packages=True, ):
+    # Retrieve documents of packages only ( functions + code)
     if sources_location_packages:
         for document in documents:
             doc_extension = get_extension_of_file(document.metadata.get('source'))
-            if (document.metadata.get('source').startsWith(language_parser.dir_name_for_3rd_party_packages()) and
+            if (document.metadata.get('source').startswith(language_parser.dir_name_for_3rd_party_packages()) and
                     document.metadata.get('content_type') == 'functions_classes' and
                     language_parser.is_function(document) and
                     language_parser.is_exported_function(document) and
@@ -41,19 +41,21 @@ def get_functions_for_package(package_name: str, documents: list[Document], lang
 
 
 def function_called_from_caller_body(document, function_to_search, language_parser: LanguageFunctionsParser) -> bool:
+    if function_to_search.strip() == "":
+        return True
     function_word = language_parser.get_function_reserved_word()
     func_header_template = rf"${function_word} (\(.*\))?\s?${function_to_search}"
-    return (re.search(pattern=function_to_search, string=document.metadata.get("page_content"),
+    return (re.search(pattern=function_to_search, string=document.page_content,
                       flags=re.IGNORECASE | re.MULTILINE)
             # verify caller function or method is not the function
             and not re.search(pattern=func_header_template,
-                              string=document.metadata.get("page_content"),
+                              string=document.page_content,
                               flags=re.IGNORECASE | re.MULTILINE))
 
 
 def document_belongs_to_package(language_parser: LanguageFunctionsParser, document: Document,
                                 package_name: str) -> bool:
-    return (not language_parser.is_root_package() and
+    return (not language_parser.is_root_package(document) and
             language_parser.get_package_name(function=document, package_name=package_name))
 
 
@@ -78,23 +80,29 @@ class ChainOfCallsRetriever(BaseRetriever):
    that delegates to the sync implementation running on another thread.
    """
 
-    documents: List[Document]
+    documents: List[Document] | None
     """List of documents comprising the path of call, if exists."""
-    documents_of_full_sources: List[Document]
-    language_parser: LanguageFunctionsParser
-    dependency_tree: DependencyTree
-    tree_dict: dict
-    manifest_path: Path
+    documents_of_full_sources: List[Document] | None
+    language_parser: Optional[LanguageFunctionsParser]
+    dependency_tree: Optional[DependencyTree]
+    tree_dict: Optional[dict]
+    ecosystem: Optional[Ecosystem]
+    manifest_path:  Optional[Path]
     package_name: str
-    found_path: bool
+    found_path: Optional[bool]
     k: int = 10
     """Number of top results to return"""
 
     def __init__(self, documents: List[Document], ecosystem: Ecosystem, manifest_path: Path,
                  *args: Any, **kwargs: Any):
         super().__init__(*args, **kwargs)
-        self.dependency_tree = get_dependency_tree_builder(ecosystem)
+        self.ecosystem = ecosystem
+        self.dependency_tree = DependencyTree(ecosystem=ecosystem)
         self.language_parser = get_language_function_parser(ecosystem)
+        self.manifest_path= manifest_path
+        if self.dependency_tree.builder is None:
+            raise RuntimeError("Couldn't continue as dependencies wasn't generated")
+
         self.tree_dict = self.dependency_tree.builder.build_tree(manifest_path=manifest_path)
         self.documents = documents
         self.found_path = False
@@ -137,14 +145,14 @@ class ChainOfCallsRetriever(BaseRetriever):
 
     def _get_relevant_documents(self, query: str, *, run_manager: CallbackManagerForRetrieverRun) -> List[Document]:
         """Sync implementations for retriever."""
-        (package_name, function) = query
+        (package_name, function) = tuple(query.split(","))
         matching_documents = []
         for package in self.tree_dict:
             if package_name in package.lower():
                 package_name = package
                 break
 
-        target_function_doc = find_initial_function(query, package_name=package_name, documents=self.documents,
+        target_function_doc = find_initial_function(function, package_name=package_name, documents=self.documents,
                                                     language_parser=self.language_parser)
         matching_documents.append(target_function_doc)
         end_loop = False
@@ -152,7 +160,8 @@ class ChainOfCallsRetriever(BaseRetriever):
         while True:
             if end_loop:
                 break
-            found_document = self.__find_caller_function(doc=target_function_doc, function_package=current_package_name)
+            found_document = self.__find_caller_function(document_function=target_function_doc,
+                                                         function_package=current_package_name)
             if found_document is not None:
                 matching_documents.append(found_document)
                 if self.language_parser.is_root_package(found_document):

@@ -34,7 +34,13 @@ class GoLanguageFunctionsParser(LanguageFunctionsParser):
         return re.search("[A-Z][a-z0-9-]*", function_name)
 
     def get_function_name(self, function: Document) -> str:
-        index_of_function_opening = function.page_content.index("{")
+        try:
+            index_of_function_opening = function.page_content.index("{")
+        except ValueError as e:
+            function_line = function.page_content.find(os.linesep)
+            print(f"function {function.page_content[:function_line]} => contains no body ")
+            return function.page_content[:function_line]
+
         function_header = function.page_content[:index_of_function_opening]
         # function is a method of a type
         if function_header.startswith("func ("):
@@ -136,7 +142,7 @@ class GoLanguageFunctionsParser(LanguageFunctionsParser):
         return None
 
     def is_root_package(self, function: Document) -> bool:
-        return not function.metadata['source'].startswith(self.dir_name_for_3rd_party_packages)
+        return not function.metadata['source'].startswith(self.dir_name_for_3rd_party_packages())
 
     def is_comment_line(self, line: str) -> bool:
         return line.strip().startswith("//")

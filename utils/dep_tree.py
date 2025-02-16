@@ -7,6 +7,8 @@ from pathlib import Path
 logger = logging.getLogger(f"poc.{__name__}")
 
 ROOT_LEVEL_SENTINEL = 'root-top-level-agent-morpheus'
+
+
 class Ecosystem(Enum):
     GO = 1
     PYTHON = 2
@@ -28,18 +30,17 @@ class DependencyTreeBuilder(ABC):
 
 class GoDependencyTreeBuilder(DependencyTreeBuilder):
 
-
     @staticmethod
     def _parent_son_separator(line: str) -> list[str]:
         return line.split(" ")
 
     def _get_parent(self, line: str):
         parts = self._parent_son_separator(line)
-        return parts.get[0]
+        return parts[0]
 
     def _get_son(self, line: str):
         parts = self._parent_son_separator(line)
-        return parts.get[1]
+        return parts[1]
 
     def __init__(self):
         pass
@@ -68,7 +69,7 @@ class GoDependencyTreeBuilder(DependencyTreeBuilder):
     @staticmethod
     def determine_go_version(manifest_path):
         go_version = ""
-        with open(manifest_path.absolute().as_posix() + "/go.mod") as go_mod_file:
+        with open(manifest_path + "/go.mod") as go_mod_file:
             for line in go_mod_file:
                 if line.startswith("go"):
                     go_version = line.split(" ")[1]
@@ -77,19 +78,22 @@ class GoDependencyTreeBuilder(DependencyTreeBuilder):
 
     @staticmethod
     def get_go_mod_graph_tree(manifest_path) -> str:
-        return subprocess.run(["bash", "-c", f"go mod graph -modfile {manifest_path.absolute().as_posix()}/go.mod"],
-                              capture_output=True, text=True)
+        return subprocess.run(["bash", "-c", f"go mod graph -modfile {manifest_path}/go.mod"],
+                              capture_output=True, text=True).stdout
 
     def extract_package_name(self, package_name: str) -> str:
-        version_start = package_name.index("@")
-        return package_name[: version_start]
+        if package_name.__contains__("@"):
+            version_start = package_name.index("@")
+            return package_name[: version_start]
+        else:
+            return package_name
 
 
-def get_dependency_tree_builder(value: Ecosystem, manifest_path: Path) -> DependencyTreeBuilder:
-    if value == Ecosystem.GO:
+def get_dependency_tree_builder(programming_language: Ecosystem) -> DependencyTreeBuilder:
+    if programming_language == Ecosystem.GO.value:
         return GoDependencyTreeBuilder()
     else:
-        raise ValueError(f'Unsupported Ecosystem {value}')
+        raise ValueError(f'Unsupported Ecosystem {programming_language}')
 
 
 class DependencyTree:
