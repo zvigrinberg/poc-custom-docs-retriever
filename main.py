@@ -31,6 +31,7 @@ retriever = ChainOfCallsRetriever(documents=documents_list, ecosystem=Ecosystem.
                                   manifest_path="/tmp/https:/github.com/zvigrinberg/router")
 process_list(documents_list)
 
-print(retriever.invoke("github.com/beorn7/perks,NewTargeted"))
+call_hierarchy_list = retriever.invoke("github.com/beorn7/perks,NewTargeted")
+print(call_hierarchy_list)
 
 

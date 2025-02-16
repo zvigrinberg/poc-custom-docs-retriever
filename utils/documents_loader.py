@@ -21,6 +21,7 @@ from langchain_community.document_loaders.parsers.language.language_parser impor
 from langchain_core.document_loaders.blob_loaders import Blob
 
 from data_models.input import SourceDocumentsInfo
+from .go_segmenters_with_methods import GoSegmenterWithMethods
 from .source_code_git_loader import SourceCodeGitLoader
 
 if typing.TYPE_CHECKING:
@@ -86,6 +87,7 @@ class ExtendedLanguageParser(LanguageParser):
 
     LANGUAGE_SEGMENTERS: dict[str, type[CodeSegmenter]] = {
         **LANGUAGE_SEGMENTERS,
+        "go": GoSegmenterWithMethods
     }
 
     def lazy_parse(self, blob: Blob) -> typing.Iterator[Document]:
@@ -460,3 +462,4 @@ class DocumentEmbedding:
                 raise ValueError(f"Unknown source type: {source_type}")  # pragma: no cover
 
         return code_vdb, doc_vdb
+
