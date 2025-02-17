@@ -153,6 +153,9 @@ class GoLanguageFunctionsParser(LanguageFunctionsParser):
         if parts[0].startswith(self.dir_name_for_3rd_party_packages()):
             package_names.append(f"{parts[1]}/{parts[2]}")
             package_names.append(f"{parts[1]}/{parts[2]}/{parts[3]}")
+        else:
+            package_names.append(f"{parts[0]}/{parts[1]}")
+            package_names.append(f"{parts[0]}/{parts[1]}/{parts[2]}")
         return package_names
 
     def get_package_name(self, function: Document, package_name: str) -> str:
