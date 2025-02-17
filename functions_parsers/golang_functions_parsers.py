@@ -103,14 +103,18 @@ class GoLanguageFunctionsParser(LanguageFunctionsParser):
                         inside_block = block_of_import[after_left_bracket + 1: before_right_bracket]
                         position_of_identifier_in_import_block = inside_block.find(identifier)
                         if position_of_identifier_in_import_block != -1:
-                            # inside_block[:position_of_identifier_in_import_block].rfind(os.linesep)
-                            row_of_identifier_and_rest = inside_block[position_of_identifier_in_import_block:]
-                            index_of_end_of_line = row_of_identifier_and_rest.find(os.linesep)
-                            row_of_identifier = row_of_identifier_and_rest[:index_of_end_of_line]
+                            previous_end_of_line = inside_block[:position_of_identifier_in_import_block].rfind(
+                                os.linesep)
+                            alias_package_extended = inside_block[previous_end_of_line:].strip()
+                            index_of_end_of_line = alias_package_extended.find(os.linesep)
+                            row_of_identifier = alias_package_extended[:index_of_end_of_line]
                             if len(row_of_identifier.split(" ")) > 1:
+                                package_name_of_alias = row_of_identifier.split(" ")[1]
+                            else:
+                                package_name_of_alias = row_of_identifier.split(" ")[0].strip()
 
-                            package_name_of_alias = row_of_identifier.split(" ")[1]
-                            if package_name_of_alias.strip().lower() == callee_package.strip().lower():
+                            if (package_name_of_alias.strip().lower() == callee_package.strip().lower()
+                                    or callee_package.strip().lower() in package_name_of_alias.strip().lower()):
                                 return True
                     # Checks if there is a dedicated import with alias and imported package name
                     else:
@@ -122,11 +126,23 @@ class GoLanguageFunctionsParser(LanguageFunctionsParser):
                             package_name_to_check = start_of_package_name[:index_of_end_of_line]
                             if package_name_to_check.strip().lower() == callee_package.strip().lower():
                                 return True
+                        #  import without alias, in this case maybe package name contain alias
+                        else:
+                            # re.search(regex, caller_function_body, re.MULTILINE)
+                            matching = re.search(rf"import .*{identifier}", code_content)
+                            if matching and matching.group(0):
+                                import_line = code_content[matching.start():]
+                                import_package_line = import_line[:import_line.find(os.linesep)].strip()
+                                package_name = import_package_line.split(r"\s")[1]
+                                if package_name.strip().lower() == callee_package.strip().lower():
+                                    return True
 
-            ## otherwise, the identifier is in the caller function signature/receiver function argument.
+            ## otherwise, the identifier is in the caller function body or in signature/receiver function argument.
+
             else:
-                # TODO check if identifier is defined in the same function and dig into structures and identifiers defined by variables
-                pass
+                # TODO check if identifier is defined in the same
+                #  function and dig into structures and identifiers defined by variables
+                True
 
         return False
 
