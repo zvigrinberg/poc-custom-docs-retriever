@@ -169,10 +169,22 @@ class ChainOfCallsRetriever(BaseRetriever):
                     self.found_path = True
                 else:
                     target_function_doc = found_document
-                    package_names = [package_name for package_name in self.language_parser.get_package_names()
+                    package_names = [package_name for package_name in
+                                     self.language_parser.get_package_names(target_function_doc)
                                      if self.tree_dict.get(package_name, None) is not None]
                     current_package_name = package_names[0]
             else:
                 end_loop = True
 
         return matching_documents
+
+    def print_call_hierarchy(self, call_hierarchy_list: list[Document]):
+        for i , package_function in enumerate(reversed(call_hierarchy_list)):
+            packages_names = self.language_parser.get_package_names(package_function)
+            maximum_length_package = max(len(packages_names[0]), len(packages_names[1]))
+            if maximum_length_package == len(packages_names[0]):
+                package_name = packages_names[0]
+            else:
+                package_name = packages_names[1]
+            function_name = self.language_parser.get_function_name(package_function)
+            print(f"(package={package_name},function={function_name},depth={i})")
