@@ -125,7 +125,7 @@ class ChainOfCallsRetriever(BaseRetriever):
         relevant_docs_to_search_in = list()
         for package in direct_parents:
             sources_location_packages = True
-            if package == ROOT_LEVEL_SENTINEL:
+            if self.tree_dict.get(package)[0] == ROOT_LEVEL_SENTINEL:
                 sources_location_packages = False
             function_name_to_search = self.language_parser.get_function_name(document_function)
             for doc in get_functions_for_package(package_name=package, documents=self.documents,
