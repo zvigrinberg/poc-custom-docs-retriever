@@ -128,7 +128,8 @@ class ChainOfCallsRetriever(BaseRetriever):
             if self.tree_dict.get(package)[0] == ROOT_LEVEL_SENTINEL:
                 sources_location_packages = False
             function_name_to_search = self.language_parser.get_function_name(document_function)
-            for doc in get_functions_for_package(package_name=package, documents=self.documents,
+            for doc in get_functions_for_package(package_name=package,
+                                                 documents=self.get_possible_docs(function_name_to_search),
                                                  language_parser=self.language_parser,
                                                  sources_location_packages=sources_location_packages,
                                                  function_to_search=function_name_to_search):
@@ -146,6 +147,9 @@ class ChainOfCallsRetriever(BaseRetriever):
                 return doc
 
         return None
+
+    def get_possible_docs(self, function_name_to_search: str) -> list[Document]:
+        return [doc for doc in self.documents if doc.page_content.__contains__(function_name_to_search)]
 
     def _get_relevant_documents(self, query: str, *, run_manager: CallbackManagerForRetrieverRun) -> List[Document]:
         """Sync implementations for retriever."""
