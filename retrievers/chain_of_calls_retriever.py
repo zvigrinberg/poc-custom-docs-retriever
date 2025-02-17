@@ -87,7 +87,7 @@ class ChainOfCallsRetriever(BaseRetriever):
     dependency_tree: Optional[DependencyTree]
     tree_dict: Optional[dict]
     ecosystem: Optional[Ecosystem]
-    manifest_path:  Optional[Path]
+    manifest_path: Optional[Path]
     package_name: str
     found_path: Optional[bool]
     k: int = 10
@@ -99,7 +99,7 @@ class ChainOfCallsRetriever(BaseRetriever):
         self.ecosystem = ecosystem
         self.dependency_tree = DependencyTree(ecosystem=ecosystem)
         self.language_parser = get_language_function_parser(ecosystem)
-        self.manifest_path= manifest_path
+        self.manifest_path = manifest_path
         if self.dependency_tree.builder is None:
             raise RuntimeError("Couldn't continue as dependencies wasn't generated")
 

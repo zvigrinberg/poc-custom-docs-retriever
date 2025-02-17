@@ -38,14 +38,14 @@ class GoLanguageFunctionsParser(LanguageFunctionsParser):
             index_of_function_opening = function.page_content.index("{")
         except ValueError as e:
             function_line = function.page_content.find(os.linesep)
-            print(f"function {function.page_content[:function_line]} => contains no body ")
+            # print(f"function {function.page_content[:function_line]} => contains no body ")
             return function.page_content[:function_line]
 
         function_header = function.page_content[:index_of_function_opening]
         # function is a method of a type
         if function_header.startswith("func ("):
             index_of_first_right_bracket = function_header.index(")")
-            skip_receiver_arg = function_header[index_of_first_right_bracket:]
+            skip_receiver_arg = function_header[index_of_first_right_bracket + 1:]
             index_of_first_left_bracket = skip_receiver_arg.index("(")
             return skip_receiver_arg[:index_of_first_left_bracket].strip()
         # regular function not tied to a certain type
@@ -82,7 +82,7 @@ class GoLanguageFunctionsParser(LanguageFunctionsParser):
         else:
             identifier = parts[0]
             if identifier.startswith("return"):
-                identifier = identifier.replace("return"," ").strip()
+                identifier = identifier.replace("return", " ").strip()
             ## verify that identifier resolves to the package name. if identifier is imported in same file, and if so , if it's the same as callee package name
             for doc in code_documents:
                 if function.metadata.get('source') == doc.metadata.get('source'):
