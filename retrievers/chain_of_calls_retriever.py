@@ -119,6 +119,8 @@ class ChainOfCallsRetriever(BaseRetriever):
             list_of_packages = self.tree_dict.get(package_name)
             if list_of_packages is not None:
                 direct_parents.extend(list_of_packages)
+            # Add same package itself to search path.
+        direct_parents.extend([function_package])
         # gets list of documents to search in only from parents of function' package.
         relevant_docs_to_search_in = list()
         for package in direct_parents:
