@@ -35,8 +35,10 @@ def get_functions_for_package(package_name: str, documents: list[Document], lang
         for document in documents:
             doc_extension = get_extension_of_file(document.metadata.get('source'))
             if (language_parser.is_root_package(document)
+                    and document.metadata.get('content_type') == 'functions_classes'
                     and language_parser.is_function(document)
-                    and language_parser.is_supported_file_extensions(doc_extension)):
+                    and language_parser.is_supported_file_extensions(doc_extension)
+                    and function_called_from_caller_body(document, function_to_search, language_parser)):
                 yield document
 
 
