@@ -57,7 +57,7 @@ class GoLanguageFunctionsParser(LanguageFunctionsParser):
     def search_for_called_function(self, caller_function: Document, callee_function: str,
                                    callee_function_package: str, code_documents: list[Document]) -> bool:
         index_of_function_opening = caller_function.page_content.index("{")
-        index_of_function_closing = caller_function.page_content.rfind("{")
+        index_of_function_closing = caller_function.page_content.rfind("}")
         caller_function_body = str(
             caller_function.page_content[index_of_function_opening + 1: index_of_function_closing])
         re.search("", caller_function_body)
@@ -81,6 +81,8 @@ class GoLanguageFunctionsParser(LanguageFunctionsParser):
         # There is a qualifier identifier.
         else:
             identifier = parts[0]
+            if identifier.startswith("return"):
+                identifier = identifier.replace("return"," ").strip()
             ## verify that identifier resolves to the package name. if identifier is imported in same file, and if so , if it's the same as callee package name
             for doc in code_documents:
                 if function.metadata.get('source') == doc.metadata.get('source'):
@@ -101,9 +103,12 @@ class GoLanguageFunctionsParser(LanguageFunctionsParser):
                         inside_block = block_of_import[after_left_bracket + 1: before_right_bracket]
                         position_of_identifier_in_import_block = inside_block.find(identifier)
                         if position_of_identifier_in_import_block != -1:
+                            # inside_block[:position_of_identifier_in_import_block].rfind(os.linesep)
                             row_of_identifier_and_rest = inside_block[position_of_identifier_in_import_block:]
                             index_of_end_of_line = row_of_identifier_and_rest.find(os.linesep)
                             row_of_identifier = row_of_identifier_and_rest[:index_of_end_of_line]
+                            if len(row_of_identifier.split(" ")) > 1:
+
                             package_name_of_alias = row_of_identifier.split(" ")[1]
                             if package_name_of_alias.strip().lower() == callee_package.strip().lower():
                                 return True
@@ -118,7 +123,7 @@ class GoLanguageFunctionsParser(LanguageFunctionsParser):
                             if package_name_to_check.strip().lower() == callee_package.strip().lower():
                                 return True
 
-            ## otherwise, the identifier defined in the caller function.
+            ## otherwise, the identifier is in the caller function signature/receiver function argument.
             else:
                 # TODO check if identifier is defined in the same function and dig into structures and identifiers defined by variables
                 pass
