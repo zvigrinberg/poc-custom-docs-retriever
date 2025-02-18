@@ -83,6 +83,9 @@ class GoLanguageFunctionsParser(LanguageFunctionsParser):
             identifier = parts[0]
             if identifier.startswith("return"):
                 identifier = identifier.replace("return", " ").strip()
+            if "(" in identifier:
+                identifier = identifier[identifier.index("(") + 1 :]
+
             ## verify that identifier resolves to the package name. if identifier is imported in same file, and if so , if it's the same as callee package name
             for doc in code_documents:
                 if function.metadata.get('source') == doc.metadata.get('source'):
