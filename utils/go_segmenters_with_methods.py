@@ -6,7 +6,7 @@ from langchain_community.document_loaders.parsers.language.go import GoSegmenter
 
 def parse_all_methods(code: str) -> list[str]:
     # regex = r"func\s*\([a-zA-Z0-9\s]*\) [a-zA-X]+\([a-zA-Z0-9\s]*\)([a-zA-Z0-9\s]*){"
-    regex = r"func\s*\([a-zA-Z0-9\s\*.]+\) [a-zA-X]+\([a-zA-Z0-9\s]*\)([a-zA-Z0-9\s*.]+){"
+    regex = r"func\s*\([a-zA-Z0-9\s\*.]+\) [a-zA-Z]+\([a-zA-Z0-9\s\[\]]*\)\s*\(?[a-zA-Z0-9\s*.,]+\)?\s*{"
     matches = re.finditer(regex, code)
     methods = list()
     for matchNum, match in enumerate(matches, start=1):
