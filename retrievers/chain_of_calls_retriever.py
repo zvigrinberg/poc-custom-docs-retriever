@@ -63,7 +63,9 @@ def document_belongs_to_package(language_parser: LanguageFunctionsParser, docume
 
 def find_initial_function(function_name: str, package_name: str, documents: list[Document],
                           language_parser: LanguageFunctionsParser) -> Document:
-    for index, document in enumerate(get_functions_for_package(package_name, documents, language_parser)):
+    relevant_docs = [doc for doc in documents if doc.metadata.get('source').__contains__(package_name) and
+                     doc.page_content.__contains__(function_name)]
+    for index, document in enumerate(get_functions_for_package(package_name, relevant_docs, language_parser)):
         # document_function_calls_input_function = True
         if function_name.lower() == language_parser.get_function_name(document).lower():
             # if language_parser.search_for_called_function(document, callee_function=function_name):
