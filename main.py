@@ -65,7 +65,7 @@ print("==============================================")
 print("Path Contents Content:")
 print("==============================================")
 print("")
-for function_method in reversed(call_hierarchy_list):
-    print(f"File: {function_method.metadata['source']}")
+for i, function_method in enumerate(reversed(call_hierarchy_list)):
+    print(f"File {i+1}: {function_method.metadata['source']}")
     print("-------------------------------------------")
     print(function_method.page_content)
