@@ -9,16 +9,16 @@ from utils.documents_loader import DocumentEmbedding
 
 def process_list(documents_list):
     simplified_codes = 0
-    functions_parsers = 0
+    functions_methods = 0
     others = 0
     for document in documents_list:
         if document.metadata.get('content_type') == 'functions_classes':
-            functions_parsers += 1
+            functions_methods += 1
         elif document.metadata.get('content_type') == 'simplified_code':
             simplified_codes += 1
         else:
             others += 1
-    print(f"simplified_codes: {simplified_codes}, functions_parsers: {functions_parsers}, others: {others}")
+    print(f"simplified_codes: {simplified_codes}, functions_methods: {functions_methods}, others: {others}")
 
 
 def create_documents():
@@ -51,7 +51,8 @@ retriever = ChainOfCallsRetriever(documents=documents_list, ecosystem=Ecosystem.
                                   manifest_path="/tmp/https:/github.com/zvigrinberg/router")
 process_list(documents_list)
 
-call_hierarchy_list = retriever.invoke("github.com/beorn7/perks,NewTargeted")
+# call_hierarchy_list = retriever.invoke("github.com/beorn7/perks,NewTargeted")
+call_hierarchy_list = retriever.invoke("github.com/NYTimes/gziphandler,Write")
 print("")
 print(f"Retriever found path={retriever.found_path}")
 print(f"path size={len(call_hierarchy_list)}")

@@ -1,3 +1,4 @@
+import logging
 import re
 from pathlib import Path
 from typing import List, Any, Optional
@@ -10,6 +11,16 @@ from functions_parsers.lang_functions_parsers import LanguageFunctionsParser
 from functions_parsers.lang_functions_parsers_factory import get_language_function_parser
 from utils.dep_tree import DependencyTree, Ecosystem, get_dependency_tree_builder, ROOT_LEVEL_SENTINEL
 
+PARENTS_INDEX = 0
+
+EXCLUSIONS_INDEX = 1
+
+logger = logging.getLogger(f"poc.{__name__}")
+
+
+def calculate_hashable_string_for_function(function_file_name: str, function_name_to_search: str) -> str:
+    return f"{function_file_name};{function_name_to_search}"
+
 
 def get_extension_of_file(file_path: str):
     extension_start = file_path.rfind(".")
@@ -17,7 +28,7 @@ def get_extension_of_file(file_path: str):
 
 
 def get_functions_for_package(package_name: str, documents: list[Document], language_parser: LanguageFunctionsParser,
-                              function_to_search="", sources_location_packages=True, ):
+                              callee_function_file_name="", function_to_search="", sources_location_packages=True):
     # Retrieve documents of packages only ( functions + code)
     if sources_location_packages:
         for document in documents:
@@ -25,7 +36,7 @@ def get_functions_for_package(package_name: str, documents: list[Document], lang
             if (document.metadata.get('source').startswith(language_parser.dir_name_for_3rd_party_packages()) and
                     document.metadata.get('content_type') == 'functions_classes' and
                     language_parser.is_function(document) and
-                    language_parser.is_exported_function(document) and
+                    is_function_callable(document, language_parser, callee_function_file_name) and
                     language_parser.is_supported_file_extensions(doc_extension) and
                     document_belongs_to_package(language_parser, document, package_name) and
                     function_called_from_caller_body(document, function_to_search, language_parser)):
@@ -40,6 +51,11 @@ def get_functions_for_package(package_name: str, documents: list[Document], lang
                     and language_parser.is_supported_file_extensions(doc_extension)
                     and function_called_from_caller_body(document, function_to_search, language_parser)):
                 yield document
+
+
+def is_function_callable(document: Document, language_parser, callee_function_file_name: str) -> bool:
+    return (language_parser.is_exported_function(document) or
+            document.metadata['source'].lower() == callee_function_file_name.lower())
 
 
 def function_called_from_caller_body(document, function_to_search, language_parser: LanguageFunctionsParser) -> bool:
@@ -66,10 +82,13 @@ def find_initial_function(function_name: str, package_name: str, documents: list
     relevant_docs = [doc for doc in documents if doc.metadata.get('source').__contains__(package_name) and
                      doc.page_content.__contains__(function_name)]
     for index, document in enumerate(get_functions_for_package(package_name, relevant_docs, language_parser)):
+
         # document_function_calls_input_function = True
         if function_name.lower() == language_parser.get_function_name(document).lower():
             # if language_parser.search_for_called_function(document, callee_function=function_name):
             return document
+    else:
+        return None
 
 
 class ChainOfCallsRetriever(BaseRetriever):
@@ -83,10 +102,10 @@ class ChainOfCallsRetriever(BaseRetriever):
    As usual, with Runnables, there's a default async implementation that's provided
    that delegates to the sync implementation running on another thread.
    """
-
+    last_visited_parent_package_indexes: dict | None
     documents: List[Document] | None
     """List of documents comprising the path of call, if exists."""
-    documents_of_full_sources: List[Document] | None
+    documents_of_full_sources: dict | None
     language_parser: Optional[LanguageFunctionsParser]
     dependency_tree: Optional[DependencyTree]
     tree_dict: Optional[dict]
@@ -107,11 +126,19 @@ class ChainOfCallsRetriever(BaseRetriever):
         if self.dependency_tree.builder is None:
             raise RuntimeError("Couldn't continue as dependencies wasn't generated")
 
-        self.tree_dict = self.dependency_tree.builder.build_tree(manifest_path=manifest_path)
-        self.documents = documents
+        self.tree_dict = dict()
+
+        for package, parents in self.dependency_tree.builder.build_tree(manifest_path=manifest_path).items():
+            parents.extend([package])
+            self.tree_dict[package] = list()
+            # [parents, []]
+            self.tree_dict[package].append(parents)
+            self.tree_dict[package].append([])
+            self.documents = documents
         self.found_path = False
-        self.documents_of_full_sources = [doc for doc in self.documents
-                                          if doc.metadata.get('content_type') == 'simplified_code']
+        self.documents_of_full_sources = {doc.metadata.get('source'): doc for doc in self.documents
+                                          if doc.metadata.get('content_type') == 'simplified_code'}
+        self.last_visited_parent_package_indexes = dict()
 
     def __find_caller_function(self, document_function: Document, function_package: str) -> Document:
         package_names = self.language_parser.get_package_names(document_function)
@@ -120,21 +147,30 @@ class ChainOfCallsRetriever(BaseRetriever):
         for package_name in package_names:
             list_of_packages = self.tree_dict.get(package_name)
             if list_of_packages is not None:
-                direct_parents.extend(list_of_packages)
+                direct_parents.extend(list_of_packages[PARENTS_INDEX])
             # Add same package itself to search path.
-        direct_parents.extend([function_package])
+        # direct_parents.extend([function_package])
         # gets list of documents to search in only from parents of function' package.
+        function_name_to_search = self.language_parser.get_function_name(document_function)
+        function_file_name = document_function.metadata.get('source')
         relevant_docs_to_search_in = list()
-        for package in direct_parents:
+        last_visited_package_index = (self.last_visited_parent_package_indexes
+                                      .get(calculate_hashable_string_for_function(function_file_name,
+                                                                                  function_name_to_search), 0))
+        package_exclusions = self.tree_dict.get(function_package)[EXCLUSIONS_INDEX]
+        for package_index, package in enumerate(direct_parents[last_visited_package_index:]):
             sources_location_packages = True
-            if self.tree_dict.get(package)[0] == ROOT_LEVEL_SENTINEL:
+            if self.tree_dict.get(package)[PARENTS_INDEX][0] == ROOT_LEVEL_SENTINEL:
                 sources_location_packages = False
-            function_name_to_search = self.language_parser.get_function_name(document_function)
+
             for doc in get_functions_for_package(package_name=package,
-                                                 documents=self.get_possible_docs(function_name_to_search),
+                                                 documents=self.get_possible_docs(function_name_to_search, package,
+                                                                                  package_exclusions,
+                                                                                  sources_location_packages),
                                                  language_parser=self.language_parser,
                                                  sources_location_packages=sources_location_packages,
-                                                 function_to_search=function_name_to_search):
+                                                 function_to_search=function_name_to_search,
+                                                 callee_function_file_name=function_file_name):
                 relevant_docs_to_search_in.append(doc)
         for doc in relevant_docs_to_search_in:
             function_is_being_called = self.language_parser.search_for_called_function(caller_function=doc,
@@ -146,27 +182,46 @@ class ChainOfCallsRetriever(BaseRetriever):
                                                                                        self.documents_of_full_sources
                                                                                        )
             if function_is_being_called:
+                package_exclusions.append(doc)
+                # update index of last scanned package for backtracking
+                hashed_value = calculate_hashable_string_for_function(function_file_name, function_name_to_search)
+                self.last_visited_parent_package_indexes[hashed_value] = last_visited_package_index + package_index
                 return doc
 
         return None
 
-    def get_possible_docs(self, function_name_to_search: str) -> list[Document]:
-        return [doc for doc in self.documents if doc.page_content.__contains__(function_name_to_search)]
+    def get_possible_docs(self, function_name_to_search: str, package: str, exclusions: list[Document], sources_location_packages: bool) \
+            -> list[
+                Document]:
+        flatten_docs_functions_names = [self.language_parser.get_function_name(doc) for doc in exclusions]
+        if sources_location_packages:
+            filter_1 = [doc for doc in self.documents if package in doc.metadata.get('source')
+                        and self.language_parser.is_function(doc) and
+                        not self.language_parser.get_function_name(doc) in flatten_docs_functions_names]
+        else:
+            filter_1 = [doc for doc in self.documents if self.language_parser.is_function(doc) and
+                        not self.language_parser.get_function_name(doc) in flatten_docs_functions_names]
+
+        return [doc for doc in filter_1 if doc.page_content.__contains__(f"{function_name_to_search}(")]
 
     def _get_relevant_documents(self, query: str, *, run_manager: CallbackManagerForRetrieverRun) -> List[Document]:
         """Sync implementations for retriever."""
         (package_name, function) = tuple(query.split(","))
         matching_documents = []
         for package in self.tree_dict:
-            if package_name in package.lower():
+            if package_name.lower() in package.lower():
                 package_name = package
                 break
 
         target_function_doc = find_initial_function(function, package_name=package_name, documents=self.documents,
                                                     language_parser=self.language_parser)
-        matching_documents.append(target_function_doc)
         end_loop = False
         current_package_name = package_name
+        if target_function_doc is not None:
+            matching_documents.append(target_function_doc)
+        else:
+            end_loop = True
+            logger.error(f"Cannot find initial function=${function}, in package=${package_name}")
         while True:
             if end_loop:
                 break
@@ -179,17 +234,28 @@ class ChainOfCallsRetriever(BaseRetriever):
                     self.found_path = True
                 else:
                     target_function_doc = found_document
-                    package_names = [package_name for package_name in
-                                     self.language_parser.get_package_names(target_function_doc)
-                                     if self.tree_dict.get(package_name, None) is not None]
-                    current_package_name = package_names[0]
+                    current_package_name = self.__determine_doc_package_name(target_function_doc)
             else:
-                end_loop = True
+                # end loop because didn't find a caller for initial function
+                if len(matching_documents) == 1:
+                    end_loop = True
+                # Backtrack.
+                else:
+                    dead_end_node = matching_documents.pop()
+                    # Excludes dead end function node from future searches.
+                    self.tree_dict.get(current_package_name)[EXCLUSIONS_INDEX].append(dead_end_node)
+                    target_function_doc = matching_documents[-1]
+                    current_package_name = self.__determine_doc_package_name(target_function_doc)
 
         return matching_documents
 
+    def __determine_doc_package_name(self, target_function_doc):
+        return [package_name for package_name in
+                self.language_parser.get_package_names(target_function_doc)
+                if self.tree_dict.get(package_name, None) is not None][0]
+
     def print_call_hierarchy(self, call_hierarchy_list: list[Document]):
-        for i , package_function in enumerate(reversed(call_hierarchy_list)):
+        for i, package_function in enumerate(reversed(call_hierarchy_list)):
             packages_names = self.language_parser.get_package_names(package_function)
             maximum_length_package = max(len(packages_names[0]), len(packages_names[1]))
             if maximum_length_package == len(packages_names[0]):

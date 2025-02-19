@@ -86,12 +86,13 @@ class GoLanguageFunctionsParser(LanguageFunctionsParser):
             if "(" in identifier:
                 identifier = identifier[identifier.index("(") + 1 :]
 
-            ## verify that identifier resolves to the package name. if identifier is imported in same file, and if so , if it's the same as callee package name
+            # verify that identifier resolves to the package name. if identifier is imported in same file, and if so ,
+            # if it's the same as callee package name
             for doc in code_documents:
-                if function.metadata.get('source') == doc.metadata.get('source'):
+                if function.metadata.get('source') == code_documents[doc].metadata.get('source'):
                     # maybe identifier is the package itself in the file
                     regex = f"package {identifier}"
-                    code_content = doc.page_content
+                    code_content = code_documents[doc].page_content
                     matching = re.search(regex, code_content, re.MULTILINE)
                     if matching and matching.group(0):
                         return True
