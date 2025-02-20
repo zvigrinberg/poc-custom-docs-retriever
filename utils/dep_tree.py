@@ -78,7 +78,7 @@ class GoDependencyTreeBuilder(DependencyTreeBuilder):
 
     @staticmethod
     def get_go_mod_graph_tree(manifest_path) -> str:
-        return subprocess.run(["bash", "-c", f"go mod graph -modfile {manifest_path}/go.mod"],
+        return subprocess.run(["bash", "-c", f" cd {manifest_path} ; go mod graph -modfile {manifest_path}/go.mod"],
                               capture_output=True, text=True).stdout
 
     def extract_package_name(self, package_name: str) -> str:

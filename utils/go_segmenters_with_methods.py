@@ -6,9 +6,20 @@ from langchain_community.document_loaders.parsers.language.go import GoSegmenter
 
 def parse_all_methods(code: str) -> list[str]:
     # regex = r"func\s*\([a-zA-Z0-9\s]*\) [a-zA-X]+\([a-zA-Z0-9\s]*\)([a-zA-Z0-9\s]*){"
-    regex = r"func\s*\([a-zA-Z0-9\s\*.]+\) [a-zA-Z]+\([a-zA-Z0-9\s\[\]]*\)\s*\(?[a-zA-Z0-9\s*.,]+\)?\s*{"
+    regex = r"func\s*\([a-zA-Z0-9\s\*.]+\) [a-zA-Z]+\([,a-zA-Z0-9\s\[\].]*\)\s*(\(?[a-zA-Z0-9\s.,*]+\)?)?\s*{"
+    methods = get_all_functions(code, regex)
+    return methods
+
+
+def parse_all_anonymous_functions(code: str) -> list[str]:
+    regex = r"(var)? [a-zA-Z0-9_]+\s*(:)?=\s*func\s*.*{"
+    functions = get_all_functions(code, regex)
+    return functions
+
+
+def get_all_functions(code: str, regex: str):
     matches = re.finditer(regex, code)
-    methods = list()
+    functions = list()
     for matchNum, match in enumerate(matches, start=1):
         curly_brackets_counter = 1
         internal_offset = 0
@@ -23,8 +34,8 @@ def parse_all_methods(code: str) -> list[str]:
                 curly_brackets_counter -= 1
                 internal_offset = internal_offset + right_bracket_ind + 1
         current_method = code[match.start(): match.end() + 1 + internal_offset]
-        methods.append(current_method)
-    return methods
+        functions.append(current_method)
+    return functions
 
 
 class GoSegmenterWithMethods(GoSegmenter):
@@ -35,11 +46,10 @@ class GoSegmenterWithMethods(GoSegmenter):
     def extract_functions_classes(self) -> List[str]:
         function_classes = super().extract_functions_classes()
         methods_classes = parse_all_methods(self.code)
+        parse_anonymous_functions = parse_all_anonymous_functions(self.code)
         function_classes.extend(methods_classes)
+        function_classes.extend(parse_anonymous_functions)
         return function_classes
-
-
-
 
 # test_str = """func (any *uint64Any) LastError() error {
 # 	return nil

@@ -64,4 +64,9 @@ class LanguageFunctionsParser(ABC):
     def get_function_reserved_word(self) -> str:
         pass
 
+    @abstractmethod
+    def get_type_reserved_word(self) -> str:
+        pass
+
+
 

@@ -10,6 +10,9 @@ class GoLanguageFunctionsParser(LanguageFunctionsParser):
     def get_function_reserved_word(self) -> str:
         return "func"
 
+    def get_type_reserved_word(self) -> str:
+        return "type"
+
     def is_searchable_file_name(self, function: Document) -> bool:
         file_path = str(function.metadata['source'])
         return "test" not in file_path[file_path.rfind("/") + 1:].split(".")[0].lower()
@@ -50,9 +53,19 @@ class GoLanguageFunctionsParser(LanguageFunctionsParser):
             return skip_receiver_arg[:index_of_first_left_bracket].strip()
         # regular function not tied to a certain type
         else:
-            index_of_first_left_bracket = function_header.index("(")
+            try:
+                index_of_first_left_bracket = function_header.index("(")
+            #    Go Generic function
+            except ValueError:
+                try:
+                    index_of_first_left_bracket = function_header.index("[")
+                except ValueError:
+                    raise ValueError(f"Invalid function header - {function_header}")
             func_with_name = function_header[:index_of_first_left_bracket]
-            return func_with_name.split(" ")[1]
+            if len(func_with_name.split(" ")) > 1:
+                return func_with_name.split(" ")[1]
+            # TODO Try to extract anonymous function var
+            # else:
 
     def search_for_called_function(self, caller_function: Document, callee_function: str,
                                    callee_function_package: str, code_documents: list[Document]) -> bool:
@@ -61,17 +74,19 @@ class GoLanguageFunctionsParser(LanguageFunctionsParser):
         caller_function_body = str(
             caller_function.page_content[index_of_function_opening + 1: index_of_function_closing])
         re.search("", caller_function_body)
-        regex = f"([a-zA-Z_][a-zA-Z]+.)*{callee_function}\("
+        regex = fr'[a-zA-Z]+.{callee_function}\('
         matching = re.search(regex, caller_function_body, re.MULTILINE)
         if matching and matching.group(0):
-            return self.__check_identifier_if_exists(function=caller_function, identifier_function=matching.group(0),
-                                                     callee_package=callee_function_package,
-                                                     code_documents=code_documents)
+            return self.__check_identifier_resolved_to_calle_function_package(function=caller_function,
+                                                                              identifier_function=matching.group(0),
+                                                                              callee_package=callee_function_package,
+                                                                              code_documents=code_documents)
         else:
             return False
 
-    def __check_identifier_if_exists(self, function: Document, identifier_function: str, callee_package: str,
-                                     code_documents: list[Document]) -> bool:
+    def __check_identifier_resolved_to_calle_function_package(self, function: Document, identifier_function: str,
+                                                              callee_package: str,
+                                                              code_documents: list[Document]) -> bool:
         parts = identifier_function.split(".")
         # If there is no qualifier identifier , then check whether callee function and caller
         # function are in the same package
@@ -84,7 +99,7 @@ class GoLanguageFunctionsParser(LanguageFunctionsParser):
             if identifier.startswith("return"):
                 identifier = identifier.replace("return", " ").strip()
             if "(" in identifier:
-                identifier = identifier[identifier.index("(") + 1 :]
+                identifier = identifier[identifier.index("(") + 1:]
 
             # verify that identifier resolves to the package name. if identifier is imported in same file, and if so ,
             # if it's the same as callee package name
@@ -146,7 +161,7 @@ class GoLanguageFunctionsParser(LanguageFunctionsParser):
             else:
                 # TODO check if identifier is defined in the same
                 #  function and dig into structures and identifiers defined by variables
-                True
+                return True
 
         return False
 
@@ -154,12 +169,18 @@ class GoLanguageFunctionsParser(LanguageFunctionsParser):
         package_names = list()
         full_doc_path = str(function.metadata['source'])
         parts = full_doc_path.split("/")
+        version = ""
+        if len(parts) > 4:
+            match = re.search(r"[vV][0-9]{1,2}", parts[4])
+            if match and match.group(0):
+                version = f"/{match.group(0)}"
+
         if parts[0].startswith(self.dir_name_for_3rd_party_packages()):
-            package_names.append(f"{parts[1]}/{parts[2]}")
-            package_names.append(f"{parts[1]}/{parts[2]}/{parts[3]}")
+            package_names.append(f"{parts[1]}/{parts[2]}{version}")
+            package_names.append(f"{parts[1]}/{parts[2]}/{parts[3]}{version}")
         else:
-            package_names.append(f"{parts[0]}/{parts[1]}")
-            package_names.append(f"{parts[0]}/{parts[1]}/{parts[2]}")
+            package_names.append(f"{parts[0]}/{parts[1]}{version}")
+            package_names.append(f"{parts[0]}/{parts[1]}/{parts[2]}{version}")
         return package_names
 
     def get_package_name(self, function: Document, package_name: str) -> str:

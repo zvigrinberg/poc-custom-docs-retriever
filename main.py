@@ -21,12 +21,18 @@ def process_list(documents_list):
     print(f"simplified_codes: {simplified_codes}, functions_methods: {functions_methods}, others: {others}")
 
 
-def create_documents():
+def create_documents(repository_url: str,
+                     repository_digest: str):
     documents = list()
     cache_path = os.environ.get("DOCUMENTS_CACHE_PATH", "/home/zgrinber/poc_cache")
-    repo_url = "https://github.com/zvigrinberg/router"
-    repo_digest = "b49f382f59d6479af9ea26f067ee5cb4e1dd13d9"
-    cached_documents_path = f"{cache_path}/{repo_url.replace('//', '.').replace('/', '.').replace(':', '')}-{repo_digest}"
+
+    repo_url = repository_url
+    repo_digest = repository_digest
+
+    cached_documents_path = \
+        (f"{cache_path}/"
+         f"{repo_url.replace('//', '.').replace('/', '.').replace(':', '')}-"
+         f"{repo_digest}")
     if os.path.isfile(cached_documents_path):
         with open(cached_documents_path, 'rb') as doc_file:
             documents = pickle.load(doc_file)  # deserialize using load()
@@ -45,28 +51,40 @@ def create_documents():
     return documents
 
 
-documents_list = create_documents()
+tests= [("https://github.com/zvigrinberg/router", "b49f382f59d6479af9ea26f067ee5cb4e1dd13d9",
+         "github.com/beorn7/perks,NewTargeted"),
+        ("https://github.com/openshift/oc-mirror", "b137a53a5360a41a70432ea2bfc98a6cee6f7a4a",
+         "github.com/mholt/archiver,Unarchive")]
 
-retriever = ChainOfCallsRetriever(documents=documents_list, ecosystem=Ecosystem.GO, package_name="",
-                                  manifest_path="/tmp/https:/github.com/zvigrinberg/router")
-process_list(documents_list)
 
-# call_hierarchy_list = retriever.invoke("github.com/beorn7/perks,NewTargeted")
-call_hierarchy_list = retriever.invoke("github.com/NYTimes/gziphandler,Write")
-print("")
-print(f"Retriever found path={retriever.found_path}")
-print(f"path size={len(call_hierarchy_list)}")
-print("")
-print("==============================================")
-print("Prints Hierarchy call functions path")
-print("==============================================")
-print("")
-retriever.print_call_hierarchy(call_hierarchy_list)
-print("==============================================")
-print("Path Contents Content:")
-print("==============================================")
-print("")
-for i, function_method in enumerate(reversed(call_hierarchy_list)):
-    print(f"File {i+1}: {function_method.metadata['source']}")
-    print("-------------------------------------------")
-    print(function_method.page_content)
+for num, test in enumerate(tests):
+    print(f"Test number #{num + 1}")
+    print(f"Test parameters: {test}")
+    (git_repo, git_commit_digest, the_input) = test
+    documents_list = create_documents(repository_url=git_repo,
+                                      repository_digest=git_commit_digest)
+
+    retriever = ChainOfCallsRetriever(documents=documents_list, ecosystem=Ecosystem.GO, package_name="",
+                                      manifest_path=f"/tmp/{git_repo}")
+    process_list(documents_list)
+
+    # call_hierarchy_list = retriever.invoke("github.com/beorn7/perks,NewTargeted")
+    call_hierarchy_list = retriever.invoke(the_input)
+    print("")
+    print(f"Retriever found path={retriever.found_path}")
+    print(f"path size={len(call_hierarchy_list)}")
+    print("")
+    print("==============================================")
+    print("Prints Hierarchy call functions path")
+    print("==============================================")
+    print("")
+    retriever.print_call_hierarchy(call_hierarchy_list)
+    print("==============================================")
+    print("Path Contents Content:")
+    print("==============================================")
+    print("")
+    for i, function_method in enumerate(reversed(call_hierarchy_list)):
+        print(f"File {i + 1}: {function_method.metadata['source']}")
+        print("-------------------------------------------")
+        print(function_method.page_content)
+    print(" ")
