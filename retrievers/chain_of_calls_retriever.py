@@ -100,6 +100,8 @@ class ChainOfCallsRetriever(BaseRetriever):
     manifest_path: Optional[Path]
     package_name: str
     found_path: Optional[bool]
+    types_classes_fields_mapping: dict[tuple, list[tuple]] | None
+    functions_local_variables_index: dict[str, dict] | None
     k: int = 10
     """Number of top results to return"""
 
@@ -130,6 +132,10 @@ class ChainOfCallsRetriever(BaseRetriever):
         self.documents_of_full_sources = {doc.metadata.get('source'): doc for doc in documents
                                           if doc.metadata.get('content_type') == 'simplified_code'}
         self.last_visited_parent_package_indexes = dict()
+        self.types_classes_fields_mapping = self.language_parser.parse_all_type_struct_class_to_fields(
+            self.documents_of_types)
+
+        self.functions_local_variables_index = self.language_parser.create_map_of_local_vars(self.documents)
 
     def __find_caller_function(self, document_function: Document, function_package: str) -> Document:
         package_names = self.language_parser.get_package_names(document_function)
@@ -170,8 +176,15 @@ class ChainOfCallsRetriever(BaseRetriever):
                                                                                        callee_function_package=
                                                                                        function_package,
                                                                                        code_documents=
-                                                                                       self.documents_of_full_sources
-                                                                                       )
+                                                                                       self.documents_of_full_sources,
+                                                                                       type_documents=
+                                                                                       self.documents_of_types,
+                                                                                       callee_function_file_name=
+                                                                                       function_file_name,
+                                                                                       fields_of_types=
+                                                                                       self.types_classes_fields_mapping
+                                                                                  ,functions_local_variables_index=
+                                                                                   self.functions_local_variables_index)
             if function_is_being_called:
                 package_exclusions.append(doc)
                 # update index of last scanned package for backtracking

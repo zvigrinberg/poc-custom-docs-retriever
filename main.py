@@ -54,7 +54,9 @@ def create_documents(repository_url: str,
 tests= [("https://github.com/zvigrinberg/router", "b49f382f59d6479af9ea26f067ee5cb4e1dd13d9",
          "github.com/beorn7/perks,NewTargeted"),
         ("https://github.com/openshift/oc-mirror", "b137a53a5360a41a70432ea2bfc98a6cee6f7a4a",
-         "github.com/mholt/archiver,Unarchive")]
+         "github.com/mholt/archiver,Unarchive"),
+        ("https://github.com/openshift/metallb","3be9d86e5752c6974a2fea99d9373af4f2225e6b",
+         "github.com/jpillora/backoff,ForAttempt")]
 
 
 for num, test in enumerate(tests):

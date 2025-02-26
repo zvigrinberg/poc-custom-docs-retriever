@@ -5,13 +5,24 @@ from langchain_core.documents import Document
 
 class LanguageFunctionsParser(ABC):
 
+
+    @abstractmethod
+    def create_map_of_local_vars(self, functions_methods_documents: list[Document]) -> dict[str, dict]:
+        pass
+
+    @abstractmethod
+    def parse_all_type_struct_class_to_fields(self, types: list[Document]) -> dict[tuple, list[tuple]]:
+        pass
+
     @abstractmethod
     def get_function_name(self, function: Document) -> str:
         pass
 
     @abstractmethod
     def search_for_called_function(self, caller_function: Document, callee_function: str, callee_function_package: str,
-                                   code_documents: list[Document]) -> bool:
+                                   code_documents: list[Document], type_documents: list[Document],
+                                   callee_function_file_name: str, fields_of_types: dict[tuple, list[tuple]],
+                                   functions_local_variables_index: dict[str, dict]) -> bool:
         pass
 
     @abstractmethod
@@ -34,7 +45,6 @@ class LanguageFunctionsParser(ABC):
     def get_comment_line_notation(self, line: str) -> str:
         pass
 
-
     @abstractmethod
     def is_exported_function(self, function: Document) -> bool:
         pass
@@ -42,7 +52,6 @@ class LanguageFunctionsParser(ABC):
     @abstractmethod
     def is_function(self, function: Document) -> bool:
         pass
-
 
     @abstractmethod
     def dir_name_for_3rd_party_packages(self) -> str:
@@ -67,6 +76,3 @@ class LanguageFunctionsParser(ABC):
     @abstractmethod
     def get_type_reserved_word(self) -> str:
         pass
-
-
-
