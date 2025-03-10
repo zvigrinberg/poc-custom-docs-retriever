@@ -183,8 +183,9 @@ class ChainOfCallsRetriever(BaseRetriever):
                                                                                        function_file_name,
                                                                                        fields_of_types=
                                                                                        self.types_classes_fields_mapping
-                                                                                  ,functions_local_variables_index=
-                                                                                   self.functions_local_variables_index)
+                                                                                       ,
+                                                                                       functions_local_variables_index=
+                                                                                       self.functions_local_variables_index)
             if function_is_being_called:
                 package_exclusions.append(doc)
                 # update index of last scanned package for backtracking
@@ -212,15 +213,37 @@ class ChainOfCallsRetriever(BaseRetriever):
     def _get_relevant_documents(self, query: str, *, run_manager: CallbackManagerForRetrieverRun) -> List[Document]:
         """Sync implementations for retriever."""
         (package_name, function) = tuple(query.split(","))
+        found_package = False
         matching_documents = []
         for package in self.tree_dict:
             if package_name.lower() in package.lower():
                 package_name = package
+                found_package = True
                 break
-
-        target_function_doc = self.__find_initial_function(function, package_name=package_name,
-                                                           documents=self.documents,
-                                                           language_parser=self.language_parser)
+        if found_package:
+            target_function_doc = self.__find_initial_function(function, package_name=package_name,
+                                                               documents=self.documents,
+                                                               language_parser=self.language_parser)
+        else:
+            # Try to create dummy package for ecosystem standard library function
+            target_function_doc = Document(page_content=f"func {function + '()' + '{}'}"
+                                           , metadata={"source": package_name,
+                                                       "ecosystem": self.ecosystem})
+            importing_docs = [value for (file, value) in self.documents_of_full_sources.items()
+                              if re.search(
+                    rf"(import {package_name}|import\s*\(\s*[\w\s\/.\"-]*{package_name}[\w\s\/.\"-]*\s*\))"
+                    , value.page_content, flags=re.MULTILINE)]
+            root_package = [key for (key, value) in self.tree_dict.items() if ROOT_LEVEL_SENTINEL in value[0]]
+            prefix_of_3rd_parties_libs = self.language_parser.dir_name_for_3rd_party_packages()
+            parents = set([self.language_parser.get_package_names(doc)[1] for doc in importing_docs if
+                           doc.metadata['source'].startswith(
+                               prefix_of_3rd_parties_libs) and self.language_parser.get_package_names(doc)[1]
+                           in self.tree_dict.keys()])
+            for doc in importing_docs:
+                if not doc.metadata.get('source').startswith(prefix_of_3rd_parties_libs):
+                    parents.add(root_package[0])
+                    break
+            self.tree_dict[package_name] = [parents, []]
         end_loop = False
         current_package_name = package_name
         if target_function_doc is not None:
@@ -278,10 +301,13 @@ class ChainOfCallsRetriever(BaseRetriever):
     def print_call_hierarchy(self, call_hierarchy_list: list[Document]):
         for i, package_function in enumerate(reversed(call_hierarchy_list)):
             packages_names = self.language_parser.get_package_names(package_function)
-            maximum_length_package = max(len(packages_names[0]), len(packages_names[1]))
-            if maximum_length_package == len(packages_names[0]):
-                package_name = packages_names[0]
+            if len(packages_names) > 1:
+                maximum_length_package = max(len(packages_names[0]), len(packages_names[1]))
+                if maximum_length_package == len(packages_names[0]):
+                    package_name = packages_names[0]
+                else:
+                    package_name = packages_names[1]
             else:
-                package_name = packages_names[1]
+                package_name = packages_names[0]
             function_name = self.language_parser.get_function_name(package_function)
             print(f"(package={package_name},function={function_name},depth={i})")

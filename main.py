@@ -51,7 +51,9 @@ def create_documents(repository_url: str,
     return documents
 
 
-tests= [("https://github.com/zvigrinberg/router", "b49f382f59d6479af9ea26f067ee5cb4e1dd13d9",
+tests= [("https://github.com/kuadrant/authorino", "f792cd138891dc1ead99fd089aa757fbca3aace9",
+         "crypto/x509,ParsePKCS1PrivateKey"),
+        ("https://github.com/zvigrinberg/router", "b49f382f59d6479af9ea26f067ee5cb4e1dd13d9",
          "github.com/beorn7/perks,NewTargeted"),
         ("https://github.com/openshift/oc-mirror", "b137a53a5360a41a70432ea2bfc98a6cee6f7a4a",
          "github.com/mholt/archiver,Unarchive"),

@@ -239,7 +239,7 @@ class GoLanguageFunctionsParser(LanguageFunctionsParser):
                         parts = row_without_var_prefix.split()
                         # variable name
                         left_side = parts[0]
-                        if parts[1].__contains__("="):
+                        if len(parts) == 2 and parts[1].__contains__("="):
                             assignment = row.strip().split("=")
                             all_vars[(left_side.strip())] = {"value": assignment[1],
                                                              "type": assignment[0].replace("*", "")}
@@ -517,15 +517,20 @@ class GoLanguageFunctionsParser(LanguageFunctionsParser):
 
                 # Checks if match some argument in function or receiver parameter ( without parenthesis of return
                 # values)
-                elif re.search(regex=regex_arguments):
-                    parameters = [tuple(e.replace(")", "").replace("(", "").split(",")) for e
-                                  in re.findall(regex_arguments, function_header)[0, 2]]
-                    return check_types_from_callee_package(parameter=identifier, params=parameters,
-                                                           type_documents=type_documents,
-                                                           callee_package=callee_package,
-                                                           code_documents=code_documents,
-                                                           callee_function_file_name=callee_function_file_name
-                                                           )
+                elif re.search(regex_arguments, function_header):
+                    return self.__trace_down_package(expression=identifier.strip(), code_documents=code_documents,
+                                                     type_documents=type_documents, callee_package=callee_package,
+                                                     fields_of_types=fields_of_types,
+                                                     functions_local_variables_index=functions_local_variables_index,
+                                                     caller_function_index=caller_function_index)
+                # parameters = [tuple(e.replace(")", "").replace("(", "").split(",")) for e
+                #               in re.findall(regex_arguments, function_header)[:2]]
+                # return check_types_from_callee_package(parameter=identifier, params=parameters,
+                #                                        type_documents=type_documents,
+                #                                        callee_package=callee_package,
+                #                                        code_documents=code_documents,
+                #                                        callee_function_file_name=callee_function_file_name
+                #                                        )
 
         return False
 
