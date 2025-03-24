@@ -123,13 +123,16 @@ class ChainOfCallsRetriever(BaseRetriever):
             # [parents, []]
             self.tree_dict[package].append(parents)
             self.tree_dict[package].append([])
-
-        self.documents = [doc for doc in documents
+        allowed_files_extensions = self.language_parser.supported_files_extensions()
+        filtered_documents = [doc for doc in documents
+                              if any([ext for ext in allowed_files_extensions if str(doc.metadata['source'])
+                                     .endswith(ext)])]
+        self.documents = [doc for doc in filtered_documents
                           if doc.page_content.startswith(self.language_parser.get_function_reserved_word())]
-        self.documents_of_types = [doc for doc in documents
+        self.documents_of_types = [doc for doc in filtered_documents
                                    if doc.page_content.startswith(self.language_parser.get_type_reserved_word())]
         self.found_path = False
-        self.documents_of_full_sources = {doc.metadata.get('source'): doc for doc in documents
+        self.documents_of_full_sources = {doc.metadata.get('source'): doc for doc in filtered_documents
                                           if doc.metadata.get('content_type') == 'simplified_code'}
         self.last_visited_parent_package_indexes = dict()
         self.types_classes_fields_mapping = self.language_parser.parse_all_type_struct_class_to_fields(
@@ -189,8 +192,8 @@ class ChainOfCallsRetriever(BaseRetriever):
             if function_is_being_called:
                 package_exclusions.append(doc)
                 # update index of last scanned package for backtracking
-                hashed_value = calculate_hashable_string_for_function(function_file_name, function_name_to_search)
-                self.last_visited_parent_package_indexes[hashed_value] = last_visited_package_index + package_index
+                # hashed_value = calculate_hashable_string_for_function(function_file_name, function_name_to_search)
+                # self.last_visited_parent_package_indexes[hashed_value] = last_visited_package_index + package_index
                 return doc
 
         return None
@@ -307,7 +310,9 @@ class ChainOfCallsRetriever(BaseRetriever):
                     package_name = packages_names[0]
                 else:
                     package_name = packages_names[1]
-            else:
+            elif len(packages_names) > 0:
                 package_name = packages_names[0]
+            else:
+                package_name = package_function.metadata['source']
             function_name = self.language_parser.get_function_name(package_function)
             print(f"(package={package_name},function={function_name},depth={i})")

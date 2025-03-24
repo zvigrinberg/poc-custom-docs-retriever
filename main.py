@@ -1,5 +1,7 @@
 import os
 import pickle
+import re
+
 from langchain_core.documents import Document
 from data_models.input import SourceDocumentsInfo
 from retrievers.chain_of_calls_retriever import ChainOfCallsRetriever
@@ -51,15 +53,94 @@ def create_documents(repository_url: str,
     return documents
 
 
-tests= [("https://github.com/kuadrant/authorino", "f792cd138891dc1ead99fd089aa757fbca3aace9",
-         "crypto/x509,ParsePKCS1PrivateKey"),
-        ("https://github.com/zvigrinberg/router", "b49f382f59d6479af9ea26f067ee5cb4e1dd13d9",
-         "github.com/beorn7/perks,NewTargeted"),
-        ("https://github.com/openshift/oc-mirror", "b137a53a5360a41a70432ea2bfc98a6cee6f7a4a",
-         "github.com/mholt/archiver,Unarchive"),
-        ("https://github.com/openshift/metallb","3be9d86e5752c6974a2fea99d9373af4f2225e6b",
-         "github.com/jpillora/backoff,ForAttempt")]
+def handle_argument(param: str) -> str:
+    if (param.startswith("'") and param.endswith("'")) or (param.startswith('"') and param.endswith('"')):
+        return param
+    else:
+        return ".*"
 
+
+def infer_if_short_package_name_match(package: str, package_names: list[str], final_package: set[str]) -> bool:
+    package_with_version_suffix = r"[./][vV][1-9]+$"
+    match = re.search(package_with_version_suffix, package)
+    if match:
+        parts = package.split(match.group())
+        short_package_name = parts[-2].split("/")[-1]
+    else:
+        parts = package.split("/")
+        short_package_name = parts[-1].split("/")[-1]
+
+    for current_package in package_names:
+        if short_package_name in current_package:
+            final_package.add(current_package)
+            return True
+
+    else:
+        return False
+
+
+def extract_using_function_name(input_string: str):
+    parts_input = input_string.split(",", 1)
+    package = parts_input[0]
+    function = parts_input[1]
+
+    # call_hierarchy_list = retriever.invoke("github.com/beorn7/perks,NewTargeted")
+    final_package = set()
+    package_functions = [doc for doc in documents if
+                         lang_parser.get_package_name(doc, package)
+                         or
+                         infer_if_short_package_name_match(package, lang_parser.get_package_names(doc), final_package)]
+
+    the_final_package = list(final_package)
+    if len(the_final_package) > 0 and the_final_package[0] != package:
+        package = the_final_package[0]
+
+    if function.__contains__(".") and "(" or ")" in function:
+        function_string = str(function)
+        function_prefix_index_end = function_string.find("(") + 1
+        function_ending_index_end = function_string.find(")")
+        current_idx = function_prefix_index_end
+        function_builder = function_string[:function_prefix_index_end]
+        while current_idx < function_ending_index_end:
+            end_of_arg_ind = function_string[current_idx:].find(",")
+            if end_of_arg_ind > -1:
+                value = handle_argument(function_string[current_idx: current_idx + end_of_arg_ind].strip())
+                function_builder += f"\\s?{value},"
+                current_idx = current_idx + end_of_arg_ind + 1
+            else:
+                # last argument
+                value = handle_argument(function_string[current_idx:function_ending_index_end].strip())
+                function_builder += f"\\s?{value}\\s?)"
+                current_idx = function_ending_index_end
+    else:
+        return input_string
+    new_function_name = ""
+    comment_line_character = lang_parser.get_comment_line_notation()
+    for func in package_functions:
+
+        if match := re.search(rf"{function_builder}", func.page_content, flags=re.MULTILINE):
+            current_offset = match.start() - 1
+            while func.page_content[current_offset] != os.linesep:
+                current_offset -= 1
+            if func.page_content[current_offset: match.start()].strip().startswith(comment_line_character):
+                pass
+            else:
+                new_function_name = lang_parser.get_function_name(func)
+                break
+    new_input = f"{package},{new_function_name}"
+    return new_input
+
+
+tests = [("https://github.com/openshift/oauth-server", "c055dbb9a84e04575ade106e9a43cc638a8aeaef",
+          'github.com/go-jose/go-jose/v4,strings.Split(token, ".")'),
+         ("https://github.com/kuadrant/authorino", "c055dbb9a84e04575ade106e9a43cc638a8aeaef",
+          "crypto/x509,ParsePKCS1PrivateKey"),
+         ("https://github.com/zvigrinberg/router", "b49f382f59d6479af9ea26f067ee5cb4e1dd13d9",
+          "github.com/beorn7/perks,NewTargeted"),
+         ("https://github.com/openshift/oc-mirror", "b137a53a5360a41a70432ea2bfc98a6cee6f7a4a",
+          "github.com/mholt/archiver,Unarchive"),
+         ("https://github.com/openshift/metallb", "3be9d86e5752c6974a2fea99d9373af4f2225e6b",
+          "github.com/jpillora/backoff,ForAttempt")]
 
 for num, test in enumerate(tests):
     print(f"Test number #{num + 1}")
@@ -70,9 +151,12 @@ for num, test in enumerate(tests):
 
     retriever = ChainOfCallsRetriever(documents=documents_list, ecosystem=Ecosystem.GO, package_name="",
                                       manifest_path=f"/tmp/{git_repo}")
-    process_list(documents_list)
+    lang_parser = retriever.language_parser
+    documents = retriever.documents
 
-    # call_hierarchy_list = retriever.invoke("github.com/beorn7/perks,NewTargeted")
+    process_list(documents_list)
+    the_input = extract_using_function_name(the_input)
+
     call_hierarchy_list = retriever.invoke(the_input)
     print("")
     print(f"Retriever found path={retriever.found_path}")
