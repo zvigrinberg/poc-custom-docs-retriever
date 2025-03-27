@@ -56,6 +56,10 @@ def create_documents(repository_url: str,
 def handle_argument(param: str) -> str:
     if (param.startswith("'") and param.endswith("'")) or (param.startswith('"') and param.endswith('"')):
         return param
+    elif param.__contains__("(") and param.__contains__(")"):
+        function_prefix_index_end = param.find("(") + 1
+        function_ending_index_end = param.rfind(")")
+        return traverse_all_parameters(function_ending_index_end, function_prefix_index_end, param)
     else:
         return ".*"
 
@@ -98,20 +102,9 @@ def extract_using_function_name(input_string: str):
     if function.__contains__(".") and "(" or ")" in function:
         function_string = str(function)
         function_prefix_index_end = function_string.find("(") + 1
-        function_ending_index_end = function_string.find(")")
-        current_idx = function_prefix_index_end
-        function_builder = function_string[:function_prefix_index_end]
-        while current_idx < function_ending_index_end:
-            end_of_arg_ind = function_string[current_idx:].find(",")
-            if end_of_arg_ind > -1:
-                value = handle_argument(function_string[current_idx: current_idx + end_of_arg_ind].strip())
-                function_builder += f"\\s?{value},"
-                current_idx = current_idx + end_of_arg_ind + 1
-            else:
-                # last argument
-                value = handle_argument(function_string[current_idx:function_ending_index_end].strip())
-                function_builder += f"\\s?{value}\\s?)"
-                current_idx = function_ending_index_end
+        function_ending_index_end = function_string.rfind(")")
+        function_builder = traverse_all_parameters(function_ending_index_end, function_prefix_index_end,
+                                                   function_string)
     else:
         return input_string
     new_function_name = ""
@@ -131,10 +124,38 @@ def extract_using_function_name(input_string: str):
     return new_input
 
 
-tests = [("https://github.com/openshift/oauth-server", "c055dbb9a84e04575ade106e9a43cc638a8aeaef",
-          'github.com/go-jose/go-jose/v4,strings.Split(token, ".")'),
-         ("https://github.com/kuadrant/authorino", "c055dbb9a84e04575ade106e9a43cc638a8aeaef",
+def traverse_all_parameters(function_ending_index_end, function_prefix_index_end, function_string):
+    current_idx = function_prefix_index_end
+    function_builder = function_string[:function_prefix_index_end]
+    if current_idx == function_ending_index_end:
+        function_builder += ")"
+    while current_idx < function_ending_index_end:
+        end_of_arg_ind = function_string[current_idx:].find(",")
+        if end_of_arg_ind > -1:
+            value = handle_argument(function_string[current_idx: current_idx + end_of_arg_ind].strip())
+            function_builder += f"\\s?{value},"
+            current_idx = current_idx + end_of_arg_ind + 1
+        else:
+            # last argument
+            value = handle_argument(function_string[current_idx:function_ending_index_end].strip())
+            function_builder += f"\\s?{value}\\s?)"
+            current_idx = function_ending_index_end
+
+    return function_builder
+
+
+# ("https://github.com/openshift/oauth-server", "c055dbb9a84e04575ade106e9a43cc638a8aeaef",
+#  'github.com/go-jose/go-jose/v4,strings.Split(token, ".")'),
+# ("https://github.com/kuadrant/authorino", "f792cd138891dc1ead99fd089aa757fbca3aace9",
+#  "crypto/rsa,Verify"),
+tests = [
+    ("https://github.com/openshift/oauth-server", "c055dbb9a84e04575ade106e9a43cc638a8aeaef",
+     'github.com/go-jose/go-jose/v4,strings.Split(token, ".")'),
+         ("https://github.com/openshift/assisted-installer", "bc16edd293be0a684ae0a97fd9dc27d0ebe8fd90",
+          'github.com/jackc/pgx/v4,pgx.Connect(context.Background(), os.Getenv("DATABASE_URL"))'),
+         ("https://github.com/kuadrant/authorino", "f792cd138891dc1ead99fd089aa757fbca3aace9",
           "crypto/x509,ParsePKCS1PrivateKey"),
+
          ("https://github.com/zvigrinberg/router", "b49f382f59d6479af9ea26f067ee5cb4e1dd13d9",
           "github.com/beorn7/perks,NewTargeted"),
          ("https://github.com/openshift/oc-mirror", "b137a53a5360a41a70432ea2bfc98a6cee6f7a4a",
