@@ -3,6 +3,8 @@ import re
 
 from langchain_community.document_loaders.parsers.language.go import GoSegmenter
 
+from utils.segmenters_utils import get_current_block
+
 
 def parse_all_methods(code: str) -> list[str]:
     # regex = r"func\s*\([a-zA-Z0-9\s]*\) [a-zA-X]+\([a-zA-Z0-9\s]*\)([a-zA-Z0-9\s]*){"
@@ -21,19 +23,7 @@ def get_all_functions(code: str, regex: str):
     matches = re.finditer(regex, code)
     functions = list()
     for matchNum, match in enumerate(matches, start=1):
-        curly_brackets_counter = 1
-        internal_offset = 0
-        current_method_body = code[match.end():]
-        while curly_brackets_counter > 0 or internal_offset == 0:
-            left_bracket_ind = current_method_body[internal_offset:].find("{")
-            right_bracket_ind = current_method_body[internal_offset:].find("}")
-            if left_bracket_ind < right_bracket_ind and left_bracket_ind != -1:
-                curly_brackets_counter += 1
-                internal_offset = internal_offset + left_bracket_ind + 1
-            else:
-                curly_brackets_counter -= 1
-                internal_offset = internal_offset + right_bracket_ind + 1
-        current_method = code[match.start(): match.end() + 1 + internal_offset]
+        current_method = get_current_block(code, match)
         functions.append(current_method)
     return functions
 

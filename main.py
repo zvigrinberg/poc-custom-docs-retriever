@@ -19,12 +19,14 @@ def process_list(documents_list):
         elif document.metadata.get('content_type') == 'simplified_code':
             simplified_codes += 1
         else:
+            print(f"document.metadata.get('content_type')={document.metadata.get('content_type')}")
             others += 1
     print(f"simplified_codes: {simplified_codes}, functions_methods: {functions_methods}, others: {others}")
 
 
 def create_documents(repository_url: str,
-                     repository_digest: str):
+                     repository_digest: str,
+                     programming_language: Ecosystem):
     documents = list()
     cache_path = os.environ.get("DOCUMENTS_CACHE_PATH", "/home/zgrinber/poc_cache")
 
@@ -46,11 +48,23 @@ def create_documents(repository_url: str,
 
         documents = document_embedder.collect_documents(
             source_info=SourceDocumentsInfo(type='code', git_repo=repo_url,
-                                            ref=("%s" % repo_digest), include=["**/*.go"],
-                                            exclude=["**/*test*.go"]))
+                                            ref=("%s" % repo_digest), include=get_includes(programming_language),
+                                            exclude=get_exclude()))
         with open(cached_documents_path, 'wb') as doc_file:  # open a text file
             pickle.dump(documents, doc_file)
     return documents
+
+
+def get_exclude():
+    return ["**/*test*", "**/*tst*"]
+
+
+def get_includes(the_ecosystem: Ecosystem) -> list[str]:
+    match the_ecosystem:
+        case Ecosystem.GO:
+            return ["**/*.go"]
+        case Ecosystem.JAVASCRIPT:
+            return ["**/*.js"]
 
 
 def handle_argument(param: str) -> str:
@@ -148,9 +162,15 @@ def traverse_all_parameters(function_ending_index_end, function_prefix_index_end
 #  'github.com/go-jose/go-jose/v4,strings.Split(token, ".")'),
 # ("https://github.com/kuadrant/authorino", "f792cd138891dc1ead99fd089aa757fbca3aace9",
 #  "crypto/rsa,Verify"),
-tests = [
+
+tests_golang = [
+    ("https://github.com/openshift/oc", "0000b3ef257d07f423dfdf9b6d274214d1b0c846",
+     'crypto/rsa,Verify'),
+
     ("https://github.com/openshift/oauth-server", "c055dbb9a84e04575ade106e9a43cc638a8aeaef",
-     'github.com/go-jose/go-jose/v4,strings.Split(token, ".")'),
+         'github.com/go-jose/go-jose/v4,strings.Split(token, ".")'),
+
+
          ("https://github.com/openshift/assisted-installer", "bc16edd293be0a684ae0a97fd9dc27d0ebe8fd90",
           'github.com/jackc/pgx/v4,pgx.Connect(context.Background(), os.Getenv("DATABASE_URL"))'),
          ("https://github.com/kuadrant/authorino", "f792cd138891dc1ead99fd089aa757fbca3aace9",
@@ -161,39 +181,45 @@ tests = [
          ("https://github.com/openshift/oc-mirror", "b137a53a5360a41a70432ea2bfc98a6cee6f7a4a",
           "github.com/mholt/archiver,Unarchive"),
          ("https://github.com/openshift/metallb", "3be9d86e5752c6974a2fea99d9373af4f2225e6b",
-          "github.com/jpillora/backoff,ForAttempt")]
+          "github.com/jpillora/backoff,ForAttempt"), Ecosystem.GO]
 
-for num, test in enumerate(tests):
-    print(f"Test number #{num + 1}")
-    print(f"Test parameters: {test}")
-    (git_repo, git_commit_digest, the_input) = test
-    documents_list = create_documents(repository_url=git_repo,
-                                      repository_digest=git_commit_digest)
+tests_js = [("https://github.com/trustification/exhort-javascript-api", "05eafb488642194a1488d3029a597c06403b6ca2",
+             'packageurl-js,toPurl'), Ecosystem.JAVASCRIPT]
+ecosystems = [tests_js, tests_golang]
+for num, ecosystem in enumerate(ecosystems):
+    for k, test in enumerate(ecosystem):
+        print(f"Ecosystem number #{num + 1}")
+        print(f"Test number #{k + 1}")
+        print(f"Test parameters: {test}")
+        (git_repo, git_commit_digest, the_input) = test
+        documents_list = create_documents(repository_url=git_repo,
+                                          repository_digest=git_commit_digest,
+                                          programming_language=ecosystem[-1])
+        process_list(documents_list)
+        retriever = ChainOfCallsRetriever(documents=documents_list, ecosystem=ecosystem[-1], package_name="",
+                                          manifest_path=f"/tmp/{git_repo}")
+        lang_parser = retriever.language_parser
+        documents = retriever.documents
 
-    retriever = ChainOfCallsRetriever(documents=documents_list, ecosystem=Ecosystem.GO, package_name="",
-                                      manifest_path=f"/tmp/{git_repo}")
-    lang_parser = retriever.language_parser
-    documents = retriever.documents
+        process_list(documents_list)
+        the_input = extract_using_function_name(the_input)
 
-    process_list(documents_list)
-    the_input = extract_using_function_name(the_input)
-
-    call_hierarchy_list = retriever.invoke(the_input)
-    print("")
-    print(f"Retriever found path={retriever.found_path}")
-    print(f"path size={len(call_hierarchy_list)}")
-    print("")
-    print("==============================================")
-    print("Prints Hierarchy call functions path")
-    print("==============================================")
-    print("")
-    retriever.print_call_hierarchy(call_hierarchy_list)
-    print("==============================================")
-    print("Path Contents Content:")
-    print("==============================================")
-    print("")
-    for i, function_method in enumerate(reversed(call_hierarchy_list)):
-        print(f"File {i + 1}: {function_method.metadata['source']}")
-        print("-------------------------------------------")
-        print(function_method.page_content)
-    print(" ")
+        call_hierarchy_list = retriever.invoke(the_input)
+        print("")
+        print(f"Retriever found path={retriever.found_path}")
+        print(f"path size={len(call_hierarchy_list)}")
+        print("")
+        print("==============================================")
+        print("Prints Hierarchy call functions path")
+        print("==============================================")
+        print("")
+        retriever.print_call_hierarchy(call_hierarchy_list)
+        print("==============================================")
+        print("Path Contents Content:")
+        print("==============================================")
+        print("")
+        for i, function_method in enumerate(reversed(call_hierarchy_list)):
+            print(f"File {i + 1}: {function_method.metadata['source']}")
+            print("-------------------------------------------")
+            print(function_method.page_content)
+        print(" ")

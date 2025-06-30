@@ -22,6 +22,7 @@ from langchain_core.document_loaders.blob_loaders import Blob
 
 from data_models.input import SourceDocumentsInfo
 from .go_segmenters_with_methods import GoSegmenterWithMethods
+from .js_extended_segmenter import ExtendedJavaScriptSegmenter, CONTAINING_SCOPE_SYMBOL
 from .source_code_git_loader import SourceCodeGitLoader
 
 if typing.TYPE_CHECKING:
@@ -87,7 +88,8 @@ class ExtendedLanguageParser(LanguageParser):
 
     LANGUAGE_SEGMENTERS: dict[str, type[CodeSegmenter]] = {
         **LANGUAGE_SEGMENTERS,
-        "go": GoSegmenterWithMethods
+        "go": GoSegmenterWithMethods,
+        "js": ExtendedJavaScriptSegmenter,
     }
 
     def lazy_parse(self, blob: Blob) -> typing.Iterator[Document]:
@@ -144,14 +146,28 @@ class ExtendedLanguageParser(LanguageParser):
             return
 
         for functions_classes in extracted_functions_classes:
-            yield Document(
-                page_content=functions_classes,
-                metadata={
-                    "source": blob.source,
-                    "content_type": "functions_classes",
-                    "language": language,
-                },
-            )
+            if (isinstance(segmenter, ExtendedJavaScriptSegmenter) and
+                    functions_classes.strip().startswith(CONTAINING_SCOPE_SYMBOL)):
+                start_of_func_method_index = functions_classes.find("\n")
+                end_of_containing_scope_name = functions_classes.find("{")
+                yield Document(
+                    page_content=functions_classes[start_of_func_method_index:],
+                    metadata={
+                        "source": blob.source,
+                        "content_type": "functions_classes",
+                        "language": language,
+                        "containing_scope": functions_classes[len(CONTAINING_SCOPE_SYMBOL):end_of_containing_scope_name]
+                    },
+                )
+            else:
+                yield Document(
+                    page_content=functions_classes,
+                    metadata={
+                        "source": blob.source,
+                        "content_type": "functions_classes",
+                        "language": language,
+                    },
+                )
 
         try:
             simplified_code = segmenter.simplify_code()
